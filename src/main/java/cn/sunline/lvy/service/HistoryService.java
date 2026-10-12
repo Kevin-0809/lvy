@@ -9,9 +9,6 @@ import cn.sunline.lvy.exception.BizException;
 import cn.sunline.lvy.repository.RequestHistoryRepository;
 import cn.sunline.lvy.util.JsonUtil;
 import cn.sunline.lvy.util.SensitiveData;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,12 +49,11 @@ public class HistoryService {
     public PageResult<HistoryDTO> page(int page, int size) {
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 200);
-        Pageable pageable = PageRequest.of(safePage, safeSize);
-        Page<RequestHistory> result = historyRepository.findAllByOrderByCreatedAtDesc(pageable);
-        List<HistoryDTO> items = result.getContent().stream()
+        long total = historyRepository.count();
+        List<HistoryDTO> items = historyRepository.page(safePage * safeSize, safeSize).stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
-        return new PageResult<>(items, result.getTotalElements(), safePage, safeSize);
+        return new PageResult<>(items, total, safePage, safeSize);
     }
 
     @Transactional

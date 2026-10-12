@@ -13,6 +13,10 @@
         currentId: null
     };
 
+    var POLL_INTERVAL = 1200;
+    var pollTimer = null;
+    var MAX_CODES = 100;
+
     function api(path, options) {
         options = options || {};
         var init = {
@@ -70,53 +74,121 @@
 
     /* ---------- 采集 ---------- */
 
+    function parseCodes() {
+        var raw = $("#serviceCodesInput").value || "";
+        var seen = {};
+        var codes = [];
+        raw.split(/[,，;；\s]+/).forEach(function (part) {
+            var code = part.trim();
+            if (code && !seen[code]) {
+                seen[code] = true;
+                codes.push(code);
+            }
+        });
+        return codes;
+    }
+
     function collect() {
-        var serviceCode = $("#serviceCodeInput").value.trim();
+        var codes = parseCodes();
         var limit = parseInt($("#limitInput").value, 10);
-        if (!serviceCode) {
-            toast("请输入服务码", true);
+        if (!codes.length) {
+            toast("请输入至少一个服务码", true);
+            return;
+        }
+        if (codes.length > MAX_CODES) {
+            toast("一次最多采集 " + MAX_CODES + " 个服务码", true);
             return;
         }
         if (!(limit >= 1 && limit <= 1000)) {
             toast("数量需在 1-1000 之间", true);
             return;
         }
+        stopPolling();
         $("#collectBtn").disabled = true;
         progressOn();
-        api("/api/msg-migration/collect", { method: "POST", body: { serviceCode: serviceCode, limit: limit } })
-            .then(function (result) {
-                showCollectResult(result);
-                state.keyword = serviceCode;
-                state.page = 0;
-                $("#filterInput").value = serviceCode;
-                return loadSamples();
+        api("/api/msg-migration/collect", { method: "POST", body: { serviceCodes: codes, limit: limit } })
+            .then(function (task) {
+                renderTask(task);
+                pollTask(task.taskId);
             })
             .catch(function (err) {
                 toast(err.message, true);
-            })
-            .finally(function () {
                 $("#collectBtn").disabled = false;
                 progressOff();
             });
     }
 
-    function showCollectResult(result) {
+    function pollTask(taskId) {
+        api("/api/msg-migration/collect/" + encodeURIComponent(taskId))
+            .then(function (task) {
+                renderTask(task);
+                if (task.status === "COMPLETED" || task.status === "FAILED") {
+                    finishTask(task);
+                } else {
+                    pollTimer = setTimeout(function () {
+                        pollTask(taskId);
+                    }, POLL_INTERVAL);
+                }
+            })
+            .catch(function (err) {
+                toast(err.message, true);
+                stopPolling();
+                $("#collectBtn").disabled = false;
+                progressOff();
+            });
+    }
+
+    function stopPolling() {
+        if (pollTimer) {
+            clearTimeout(pollTimer);
+            pollTimer = null;
+        }
+    }
+
+    function finishTask(task) {
+        stopPolling();
+        $("#collectBtn").disabled = false;
+        progressOff();
+        if (task.status === "FAILED") {
+            toast("采集任务失败", true);
+        } else {
+            toast("采集完成，共采集 " + task.collected + " 条");
+        }
+        state.page = 0;
+        loadSamples();
+    }
+
+    function statusText(status) {
+        return { PENDING: "排队中", RUNNING: "采集中", COMPLETED: "已完成", FAILED: "失败" }[status] || status;
+    }
+
+    function renderTask(task) {
         var box = $("#collectResult");
         box.classList.remove("hidden");
         box.innerHTML = "";
-        var byType = result.collectedByType || {};
+        var done = task.status === "COMPLETED" || task.status === "FAILED";
         var summary = document.createElement("div");
-        summary.textContent = "服务码 " + result.serviceCode
-            + "：bzjson " + (byType.bzjson || 0) + " 条、soap " + (byType.soap || 0) + " 条"
-            + "（共 " + result.collected + " 条），跳过重复 " + result.skipped
-            + " 条，扫描分区 " + result.scannedPartitions + " 个"
-            + (result.completed ? "（两类均已达到目标）" : "（已扫描全部分区）");
+        summary.textContent = "任务 " + String(task.taskId).slice(0, 8)
+            + " · " + statusText(task.status)
+            + " · 已完成 " + task.finished + "/" + task.total + " 个服务码"
+            + " · 已采集 " + task.collected + " 条，跳过重复 " + task.skipped + " 条";
         box.appendChild(summary);
-        if (result.hitPartitions && result.hitPartitions.length) {
-            var hit = document.createElement("div");
-            hit.textContent = "命中分区：" + result.hitPartitions.join("、");
-            box.appendChild(hit);
-        }
+        (task.results || []).forEach(function (item) {
+            var byType = item.collectedByType || {};
+            var line = document.createElement("div");
+            line.textContent = "· " + item.serviceCode
+                + "：bzjson " + (byType.bzjson || 0) + "、soap " + (byType.soap || 0)
+                + "（共 " + item.collected + "），跳过 " + item.skipped
+                + "，扫描分区 " + item.scannedPartitions
+                + (done ? (item.completed ? "，达标" : "，已扫尽") : "");
+            box.appendChild(line);
+        });
+        var errors = task.errors || {};
+        Object.keys(errors).forEach(function (code) {
+            var line = document.createElement("div");
+            line.textContent = "× " + code + "：" + errors[code];
+            box.appendChild(line);
+        });
     }
 
     /* ---------- 列表 ---------- */

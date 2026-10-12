@@ -103,18 +103,19 @@
 
         <main class="cm-content cm-migration-content">
             <h1 class="cm-page-title">报文采集</h1>
-            <p class="cm-page-desc">输入服务码，从默认数据源按分区从近到远查找报文。在列表中选择记录，下方查看和编辑明文。</p>
+            <p class="cm-page-desc">输入一个或多个服务码（S码），提交后由后台异步并发采集。可在下方查看进度，完成后在列表中选择记录查看和编辑明文。</p>
 
             <div class="cm-migration-layout">
             <section class="cm-card" id="panel-collect">
                 <h2 class="cm-card-title">采集条件</h2>
                 <div class="cm-form-grid">
                     <div class="cm-field">
-                        <label for="serviceCodeInput">服务码（S码）</label>
-                        <input id="serviceCodeInput" class="cm-input" aria-label="服务码" placeholder="如 S30759418FcySetlRateInq">
+                        <label for="serviceCodesInput">服务码（S码），支持多个</label>
+                        <textarea id="serviceCodesInput" class="cm-input cm-textarea" aria-label="服务码" rows="3"
+                                  placeholder="每行一个，或用逗号分隔，例如：&#10;S30759418FcySetlRateInq&#10;S30759418FcyAcctInq"></textarea>
                     </div>
                     <div class="cm-field">
-                        <label for="limitInput">每类采集数量（bzjson / soap 各 N 条）</label>
+                        <label for="limitInput">每个服务码每类采集数量（bzjson / soap 各 N 条）</label>
                         <input id="limitInput" class="cm-input" aria-label="每类采集数量" type="number" min="1" max="1000" value="10">
                     </div>
                     <div class="cm-actions">
@@ -124,7 +125,7 @@
                 <div id="collectResult" class="cm-result hidden"></div>
                 <div class="cm-note">
                     <span class="cm-note-mark">i</span>
-                    <span>源表 txn_code 实际为「服务码&amp;bzjson / 服务码&amp;soap」，输入纯服务码会自动补全；bzjson 与 soap 各采集指定数量；blob 报文按 UTF-8 / GBK 转为明文入库。</span>
+                    <span>采集为异步任务：提交后立即返回任务号，页面自动轮询进度，多个服务码由有界线程池并发采集（并发度可在 application.yml 配置）。源表 txn_code 实际为「服务码&amp;bzjson / 服务码&amp;soap」，输入纯服务码会自动补全；blob 报文按 UTF-8 / GBK 转为明文入库。</span>
                 </div>
             </section>
 

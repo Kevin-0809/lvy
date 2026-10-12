@@ -67,8 +67,8 @@ public class ApiRequestService {
 
     @Transactional
     public void delete(Long id) {
-        ApiRequest entity = find(id);
-        requestRepository.delete(entity);
+        find(id);
+        requestRepository.deleteById(id);
     }
 
     private ApiRequest find(Long id) {

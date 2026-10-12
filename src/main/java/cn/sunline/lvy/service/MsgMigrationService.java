@@ -1,6 +1,5 @@
 package cn.sunline.lvy.service;
 
-import cn.sunline.lvy.dto.MsgCollectRequest;
 import cn.sunline.lvy.dto.MsgCollectResult;
 import cn.sunline.lvy.dto.MsgSampleDTO;
 import cn.sunline.lvy.dto.MsgSampleUpdateRequest;
@@ -12,9 +11,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,20 +19,20 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * 报文迁移：按服务码从 bxds.msg_flow_log_request 的分区（近到远）采集
- * bzjson / soap 报文明文并落本地 H2；两种类型各自采集指定数量。
+ * bzjson / soap 报文明文并落本地主库；两种类型各自采集指定数量。
+ * 单个服务码的采集由 {@link MsgCollectTaskService} 调度为异步任务。
  */
 @Service
 public class MsgMigrationService {
 
     private static final Logger log = LoggerFactory.getLogger(MsgMigrationService.class);
     private static final List<String> MESSAGE_TYPES = List.of("bzjson", "soap");
-    private static final int DEFAULT_LIMIT = 10;
     private static final int MAX_LIMIT = 1000;
 
     private final MsgSourceReader sourceReader;
@@ -51,18 +47,20 @@ public class MsgMigrationService {
         this.defaultCharset = resolveCharset(charset);
     }
 
-    public MsgCollectResult collect(MsgCollectRequest request) {
-        String serviceCode = request.getServiceCode() == null ? "" : request.getServiceCode().trim();
-        if (serviceCode.isEmpty()) {
+    /**
+     * 采集单个服务码的 bzjson / soap 报文明文；{@code onProgress} 每扫描完一个分区回调一次当前进度快照。
+     */
+    public MsgCollectResult collectOne(String serviceCode, int perTypeLimit, Consumer<MsgCollectResult> onProgress) {
+        String code = serviceCode == null ? "" : serviceCode.trim();
+        if (code.isEmpty()) {
             throw new BizException(400, "服务码不能为空");
         }
-        int perTypeLimit = request.getLimit() == null ? DEFAULT_LIMIT : request.getLimit();
         if (perTypeLimit < 1 || perTypeLimit > MAX_LIMIT) {
             throw new BizException(400, "每类采集数量需在 1-" + MAX_LIMIT + " 之间");
         }
 
         MsgCollectResult result = new MsgCollectResult();
-        result.setServiceCode(serviceCode);
+        result.setServiceCode(code);
         result.setRequested(perTypeLimit);
 
         List<String> partitions;
@@ -77,7 +75,7 @@ public class MsgMigrationService {
             throw new BizException(404, "未在 bxds 找到 msg_flow_log_request 的按日分区");
         }
 
-        Map<String, Integer> collectedByType = new LinkedHashMap<>();
+        Map<String, Integer> collectedByType = result.getCollectedByType();
         for (String type : MESSAGE_TYPES) {
             collectedByType.put(type, 0);
         }
@@ -96,7 +94,7 @@ public class MsgMigrationService {
                 int remaining = perTypeLimit - collectedByType.get(messageType);
                 List<MsgSourceRecord> records;
                 try {
-                    records = sourceReader.queryPartition(partition, serviceCode, messageType, remaining);
+                    records = sourceReader.queryPartition(partition, code, messageType, remaining);
                 } catch (Exception e) {
                     log.warn("分区 {} 类型 {} 查询失败: {}", partition, messageType, e.getMessage());
                     continue;
@@ -117,7 +115,7 @@ public class MsgMigrationService {
                         continue;
                     }
                     try {
-                        repository.save(toEntity(serviceCode, partition, record, messageType));
+                        repository.save(toEntity(code, partition, record, messageType));
                         collectedByType.put(messageType, collectedByType.get(messageType) + 1);
                         hit = true;
                     } catch (DataIntegrityViolationException e) {
@@ -128,13 +126,24 @@ public class MsgMigrationService {
             if (hit) {
                 result.getHitPartitions().add(partition);
             }
+            result.setCollected(sum(collectedByType));
+            if (onProgress != null) {
+                onProgress.accept(result);
+            }
         }
 
-        int total = collectedByType.values().stream().mapToInt(Integer::intValue).sum();
-        result.setCollected(total);
-        result.setCollectedByType(collectedByType);
+        result.setCollected(sum(collectedByType));
         result.setCompleted(collectedByType.values().stream().allMatch(value -> value >= perTypeLimit));
         return result;
+    }
+
+    private int sum(Map<String, Integer> collectedByType) {
+        return collectedByType.values().stream().mapToInt(Integer::intValue).sum();
+    }
+
+    /** 采集单个服务码，不关心中间进度。 */
+    public MsgCollectResult collectOne(String serviceCode, int perTypeLimit) {
+        return collectOne(serviceCode, perTypeLimit, null);
     }
 
     private boolean allReached(Map<String, Integer> collectedByType, int limit) {
@@ -145,15 +154,11 @@ public class MsgMigrationService {
     public PageResult<MsgSampleDTO> page(String keyword, int page, int size) {
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 200);
-        Pageable pageable = PageRequest.of(safePage, safeSize);
-        Page<MsgSample> result = (keyword == null || keyword.isBlank())
-                ? repository.findAllByOrderByCreatedAtDesc(pageable)
-                : repository.findByServiceCodeContainingOrTransIdContainingOrderByCreatedAtDesc(
-                        keyword.trim(), keyword.trim(), pageable);
-        List<MsgSampleDTO> items = result.getContent().stream()
+        long total = repository.count(keyword);
+        List<MsgSampleDTO> items = repository.page(keyword, safePage * safeSize, safeSize).stream()
                 .map(sample -> MsgSampleDTO.from(sample, false))
                 .toList();
-        return new PageResult<>(items, result.getTotalElements(), safePage, safeSize);
+        return new PageResult<>(items, total, safePage, safeSize);
     }
 
     @Transactional(readOnly = true)

@@ -372,6 +372,15 @@ button {
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
+.cm-textarea {
+    height: auto;
+    min-height: 84px;
+    padding: 10px 12px;
+    line-height: 1.55;
+    resize: vertical;
+    font-family: inherit;
+}
+
 .cm-actions {
     display: flex;
     justify-content: flex-end;

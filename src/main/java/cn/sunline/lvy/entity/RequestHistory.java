@@ -1,66 +1,37 @@
 package cn.sunline.lvy.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.Table;
-
 import java.time.LocalDateTime;
 
 /**
  * 请求历史：每次发送成功后自动记录。
  */
-@Entity
-@Table(name = "ivy_request_history")
 public class RequestHistory {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(length = 10)
     private String method;
 
-    @Column(length = 4000)
     private String url;
 
-    @Column(columnDefinition = "TEXT")
     private String headers;
 
-    @Column(columnDefinition = "TEXT")
     private String params;
 
-    @Column(name = "body_type", length = 30)
     private String bodyType;
 
-    @Column(name = "body_content", columnDefinition = "TEXT")
     private String bodyContent;
 
-    @Column(name = "auth_type", length = 30)
     private String authType;
 
-    @Column(name = "auth_config", columnDefinition = "TEXT")
     private String authConfig;
 
-    @Column(name = "status_code")
     private Integer statusCode;
 
-    @Column(name = "duration_ms")
     private Long durationMs;
 
-    @Column(name = "response_size")
     private Long responseSize;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
-
-    @PrePersist
-    public void prePersist() {
-        this.createdAt = LocalDateTime.now();
-    }
 
     public Long getId() {
         return id;

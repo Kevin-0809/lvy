@@ -4,15 +4,6 @@ server:
 spring:
   application:
     name: lvy
-  jpa:
-    hibernate:
-      ddl-auto: update
-    open-in-view: false
-    properties:
-      hibernate:
-        dialect: cn.sunline.lvy.config.GaussDialect
-        format_sql: false
-    show-sql: false
   sql:
     init:
       mode: never
@@ -42,3 +33,6 @@ ivy:
       driver-class-name: ${BXDS_DATASOURCE_DRIVER:org.postgresql.Driver}
   msg-migration:
     charset: ${MSG_MIGRATION_CHARSET:UTF-8}
+    # 多服务码并发采集的线程数（有界并发）与等待队列容量。
+    concurrency: ${MSG_MIGRATION_CONCURRENCY:4}
+    queue-capacity: ${MSG_MIGRATION_QUEUE_CAPACITY:1000}

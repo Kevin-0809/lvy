@@ -2,26 +2,28 @@ package cn.sunline.lvy.dto;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+
+import java.util.List;
 
 /**
- * 报文采集入参。
+ * 报文采集入参：一次可提交多个服务码（S码），每个服务码按 bzjson / soap 各采集 limit 条。
  */
 public class MsgCollectRequest {
 
-    @NotBlank(message = "服务码不能为空")
-    private String serviceCode;
+    @NotEmpty(message = "服务码不能为空")
+    private List<String> serviceCodes;
 
     @Min(value = 1, message = "采集数量至少为 1")
     @Max(value = 1000, message = "采集数量最多为 1000")
     private Integer limit = 10;
 
-    public String getServiceCode() {
-        return serviceCode;
+    public List<String> getServiceCodes() {
+        return serviceCodes;
     }
 
-    public void setServiceCode(String serviceCode) {
-        this.serviceCode = serviceCode;
+    public void setServiceCodes(List<String> serviceCodes) {
+        this.serviceCodes = serviceCodes;
     }
 
     public Integer getLimit() {

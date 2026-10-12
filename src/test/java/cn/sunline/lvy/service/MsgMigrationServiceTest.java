@@ -1,6 +1,5 @@
 package cn.sunline.lvy.service;
 
-import cn.sunline.lvy.dto.MsgCollectRequest;
 import cn.sunline.lvy.dto.MsgCollectResult;
 import cn.sunline.lvy.entity.MsgSample;
 import cn.sunline.lvy.repository.MsgSampleRepository;
@@ -34,10 +33,7 @@ class MsgMigrationServiceTest {
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         MsgMigrationService service = new MsgMigrationService(reader, repository, "UTF-8");
 
-        MsgCollectRequest request = new MsgCollectRequest();
-        request.setServiceCode("S001");
-        request.setLimit(2);
-        MsgCollectResult result = service.collect(request);
+        MsgCollectResult result = service.collectOne("S001", 2);
 
         assertThat(result.getCollected()).isEqualTo(4);
         assertThat(result.getCollectedByType()).containsEntry("bzjson", 2).containsEntry("soap", 2);
@@ -56,10 +52,7 @@ class MsgMigrationServiceTest {
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         MsgMigrationService service = new MsgMigrationService(reader, repository, "UTF-8");
 
-        MsgCollectRequest request = new MsgCollectRequest();
-        request.setServiceCode("S001");
-        request.setLimit(2);
-        MsgCollectResult result = service.collect(request);
+        MsgCollectResult result = service.collectOne("S001", 2);
 
         assertThat(result.getCollectedByType()).containsEntry("bzjson", 2).containsEntry("soap", 1);
         assertThat(result.getCollected()).isEqualTo(3);
@@ -76,10 +69,7 @@ class MsgMigrationServiceTest {
                 .thenReturn(true);
         MsgMigrationService service = new MsgMigrationService(reader, repository, "UTF-8");
 
-        MsgCollectRequest request = new MsgCollectRequest();
-        request.setServiceCode("S001");
-        request.setLimit(5);
-        MsgCollectResult result = service.collect(request);
+        MsgCollectResult result = service.collectOne("S001", 5);
 
         assertThat(result.getCollected()).isZero();
         assertThat(result.getSkipped()).isEqualTo(2);
@@ -97,10 +87,7 @@ class MsgMigrationServiceTest {
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         MsgMigrationService service = new MsgMigrationService(reader, repository, "UTF-8");
 
-        MsgCollectRequest request = new MsgCollectRequest();
-        request.setServiceCode("S001");
-        request.setLimit(1);
-        service.collect(request);
+        service.collectOne("S001", 1);
 
         ArgumentCaptor<MsgSample> captor = ArgumentCaptor.forClass(MsgSample.class);
         verify(repository).save(captor.capture());
