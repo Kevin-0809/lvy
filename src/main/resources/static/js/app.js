@@ -39,7 +39,10 @@
             rawBody: "",
             formBody: [],
             authType: "none",
-            authConfig: {}
+            authConfig: {},
+            esfMode: "off",
+            environmentId: "",
+            messageType: "bzjson"
         };
     }
 
@@ -417,6 +420,13 @@
         $("#basicUsername").value = req.authConfig.username || "";
         $("#basicPassword").value = req.authConfig.password || "";
 
+        $$('input[name="esfMode"]').forEach(function (radio) {
+            radio.checked = radio.value === (req.esfMode || "off");
+        });
+        toggleEsfAreas();
+        $("#esfEnvIdField").value = req.environmentId || "";
+        $("#esfMessageTypeField").value = req.messageType || "bzjson";
+
         $("#rawBodyInput").value = req.rawBody || "";
 
         renderKv($("#paramsTable"), req.params, {
@@ -460,6 +470,10 @@
         $("#authBasic").classList.toggle("hidden", type !== "basic");
     }
 
+    function toggleEsfAreas() {
+        $("#esfAuthInputs").classList.toggle("hidden", state.request.esfMode !== "on");
+    }
+
     /* ---------- 请求构造与发送 ---------- */
 
     function buildProxyPayload() {
@@ -485,7 +499,9 @@
             bodyType: req.bodyType,
             bodyContent: bodyContent,
             authType: req.authType,
-            authConfig: authConfig
+            authConfig: authConfig,
+            environmentId: req.esfMode === "on" ? (req.environmentId || "") : null,
+            messageType: req.esfMode === "on" ? (req.messageType || "") : null
         };
     }
 
@@ -926,6 +942,19 @@
             state.request.authConfig.password = $("#basicPassword").value;
         });
 
+        $$('input[name="esfMode"]').forEach(function (radio) {
+            radio.addEventListener("change", function () {
+                state.request.esfMode = radio.value;
+                toggleEsfAreas();
+            });
+        });
+        $("#esfEnvIdField").addEventListener("input", function () {
+            state.request.environmentId = $("#esfEnvIdField").value;
+        });
+        $("#esfMessageTypeField").addEventListener("change", function () {
+            state.request.messageType = $("#esfMessageTypeField").value;
+        });
+
         $("#resetBtn").addEventListener("click", function () {
             state.request = defaultRequest();
             state.editingRequestId = null;
@@ -1047,6 +1076,9 @@
         state.request.bodyType = req.bodyType || "none";
         state.request.authType = req.authType || "none";
         state.request.authConfig = req.authConfig || {};
+        state.request.esfMode = "off";
+        state.request.environmentId = "";
+        state.request.messageType = "bzjson";
         if (state.request.authConfig.token === "••••••••") state.request.authConfig.token = "";
         if (state.request.authConfig.password === "••••••••") state.request.authConfig.password = "";
         applyBodyContent(req.bodyType, req.bodyContent);
@@ -1238,6 +1270,9 @@
         state.request.bodyType = item.bodyType || "none";
         state.request.authType = item.authType || "none";
         state.request.authConfig = item.authConfig || {};
+        state.request.esfMode = "off";
+        state.request.environmentId = "";
+        state.request.messageType = "bzjson";
         applyBodyContent(item.bodyType, item.bodyContent);
         syncEditorFromState();
         renderCollections();

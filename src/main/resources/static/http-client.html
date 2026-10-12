@@ -184,6 +184,30 @@
                         <div id="authNone" class="auth-area">
                             <p class="hint">不添加认证信息</p>
                         </div>
+                        <div class="inline-field">
+                            <label>ESF 验证</label>
+                            <div class="radio-group" id="esfModeGroup">
+                                <label><input type="radio" name="esfMode" value="off" checked><span>不注入</span></label>
+                                <label><input type="radio" name="esfMode" value="on"><span>自动注入 micServId / authContent</span></label>
+                            </div>
+                        </div>
+                        <div id="esfAuthInputs" class="auth-area hidden">
+                            <div class="field-row">
+                                <label>环境 ID</label>
+                                <input type="text" id="esfEnvIdField" class="text-input" aria-label="ESF 环境 ID"
+                                       placeholder="如 528 / ccbs" spellcheck="false" autocomplete="off">
+                            </div>
+                            <div class="field-row">
+                                <label>报文类型</label>
+                                <select id="esfMessageTypeField" class="text-input" aria-label="ESF 报文类型">
+                                    <option value="bzjson">bzjson</option>
+                                    <option value="soap">soap</option>
+                                    <option value="sop">sop</option>
+                                    <option value="sop2cbsp">sop2cbsp</option>
+                                </select>
+                            </div>
+                            <p class="hint">发送时按环境 ID + 报文类型从 tss_service_auth 生成验证信息并补充请求头。</p>
+                        </div>
                     </div>
                 </div>
             </section>

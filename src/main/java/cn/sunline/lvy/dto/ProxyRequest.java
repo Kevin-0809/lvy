@@ -30,6 +30,12 @@ public class ProxyRequest {
 
     private Map<String, String> authConfig = new LinkedHashMap<>();
 
+    /** ESF 环境 ID；与 messageType 同时存在时，发送前自动注入 micServId / authContent 头。 */
+    private String environmentId;
+
+    /** ESF 报文类型（bzjson / soap / sop / sop2cbsp 等）。 */
+    private String messageType;
+
     public String getMethod() {
         return method;
     }
@@ -92,5 +98,21 @@ public class ProxyRequest {
 
     public void setAuthConfig(Map<String, String> authConfig) {
         this.authConfig = authConfig;
+    }
+
+    public String getEnvironmentId() {
+        return environmentId;
+    }
+
+    public void setEnvironmentId(String environmentId) {
+        this.environmentId = environmentId;
+    }
+
+    public String getMessageType() {
+        return messageType;
+    }
+
+    public void setMessageType(String messageType) {
+        this.messageType = messageType;
     }
 }

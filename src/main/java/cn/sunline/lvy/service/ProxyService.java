@@ -1,5 +1,7 @@
 package cn.sunline.lvy.service;
 
+import cn.sunline.lvy.dto.EsfAuthRequest;
+import cn.sunline.lvy.dto.EsfAuthResult;
 import cn.sunline.lvy.dto.KeyValue;
 import cn.sunline.lvy.dto.ProxyRequest;
 import cn.sunline.lvy.dto.ProxyResponse;
@@ -17,6 +19,7 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
+import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
@@ -46,22 +49,26 @@ public class ProxyService {
     private final HttpClient httpClient;
     private final VariableService variableService;
     private final HistoryService historyService;
+    private final EsfAuthService esfAuthService;
     private final boolean allowPrivateHosts;
     private final long maxResponseBytes;
 
     @Autowired
-    public ProxyService(VariableService variableService, HistoryService historyService) {
-        this(variableService, historyService, false, DEFAULT_MAX_RESPONSE_BYTES);
-    }
-
-    ProxyService(VariableService variableService, HistoryService historyService, boolean allowPrivateHosts) {
-        this(variableService, historyService, allowPrivateHosts, DEFAULT_MAX_RESPONSE_BYTES);
+    public ProxyService(VariableService variableService, HistoryService historyService,
+                        EsfAuthService esfAuthService) {
+        this(variableService, historyService, esfAuthService, false, DEFAULT_MAX_RESPONSE_BYTES);
     }
 
     ProxyService(VariableService variableService, HistoryService historyService,
-                 boolean allowPrivateHosts, long maxResponseBytes) {
+                 EsfAuthService esfAuthService, boolean allowPrivateHosts) {
+        this(variableService, historyService, esfAuthService, allowPrivateHosts, DEFAULT_MAX_RESPONSE_BYTES);
+    }
+
+    ProxyService(VariableService variableService, HistoryService historyService,
+                 EsfAuthService esfAuthService, boolean allowPrivateHosts, long maxResponseBytes) {
         this.variableService = variableService;
         this.historyService = historyService;
+        this.esfAuthService = esfAuthService;
         this.allowPrivateHosts = allowPrivateHosts;
         this.maxResponseBytes = maxResponseBytes;
         this.httpClient = HttpClient.newBuilder()
@@ -111,12 +118,16 @@ public class ProxyService {
         }
 
         applyAuth(builder, headers, request.getAuthType(), authConfig);
+        applyEsfAuth(builder, request, headers);
 
         long start = System.nanoTime();
         ProxyResponse response = new ProxyResponse();
         try {
-            HttpResponse<InputStream> httpResponse = httpClient.send(builder.build(),
+            HttpRequest httpRequest = builder.build();
+            HttpResponse<InputStream> httpResponse = httpClient.send(httpRequest,
                     HttpResponse.BodyHandlers.ofInputStream());
+            log.info("已发送 {} {}（HTTP {}），请求头：{}", method, uri,
+                    httpResponse.statusCode(), formatHeaders(httpRequest.headers()));
             long durationMs = (System.nanoTime() - start) / 1_000_000;
 
             byte[] bytes = readResponse(httpResponse.body());
@@ -333,6 +344,46 @@ public class ProxyService {
             default:
                 break;
         }
+    }
+
+    /**
+     * 参考 rose 的 {@code HttpRequestMessageSender#send}：当请求带有 ESF 环境与报文类型时，
+     * 用 tss_service_auth 生成验证信息并自动补上 {@code micServId}（sid）与 {@code authContent} 头。
+     * 用户已在 Headers 中显式配置同名头时不覆盖。
+     */
+    private void applyEsfAuth(HttpRequest.Builder builder, ProxyRequest request, List<KeyValue> headers) {
+        if (esfAuthService == null || isBlank(request.getEnvironmentId()) || isBlank(request.getMessageType())) {
+            return;
+        }
+        EsfAuthRequest authRequest = new EsfAuthRequest();
+        authRequest.setEnvironmentId(request.getEnvironmentId().trim());
+        authRequest.setMessageType(request.getMessageType().trim());
+        EsfAuthResult auth = esfAuthService.generate(authRequest);
+        if (!hasHeader(headers, "micServId")) {
+            builder.header("micServId", auth.getSid() == null ? "" : auth.getSid());
+        }
+        if (!hasHeader(headers, "authContent")) {
+            builder.header("authContent", auth.getAuthContent() == null ? "" : auth.getAuthContent());
+        }
+    }
+
+    private boolean hasHeader(List<KeyValue> headers, String name) {
+        return headers.stream().anyMatch(h -> h.isActive() && !isBlank(h.getKey())
+                && h.getKey().trim().equalsIgnoreCase(name));
+    }
+
+    private String formatHeaders(HttpHeaders headers) {
+        if (headers == null || headers.map().isEmpty()) {
+            return "{}";
+        }
+        StringBuilder sb = new StringBuilder("{");
+        headers.map().forEach((name, values) -> {
+            if (sb.length() > 1) {
+                sb.append(", ");
+            }
+            sb.append(name).append('=').append(String.join("|", values));
+        });
+        return sb.append('}').toString();
     }
 
     private List<KeyValue> toHeaderPairs(Map<String, List<String>> map) {
