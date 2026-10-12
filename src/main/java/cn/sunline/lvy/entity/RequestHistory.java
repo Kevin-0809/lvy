@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
  * 请求历史：每次发送成功后自动记录。
  */
 @Entity
-@Table(name = "request_history")
+@Table(name = "ivy_request_history")
 public class RequestHistory {
 
     @Id

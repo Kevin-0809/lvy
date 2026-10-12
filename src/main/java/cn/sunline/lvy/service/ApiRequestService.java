@@ -7,6 +7,7 @@ import cn.sunline.lvy.exception.BizException;
 import cn.sunline.lvy.repository.ApiCollectionRepository;
 import cn.sunline.lvy.repository.ApiRequestRepository;
 import cn.sunline.lvy.util.JsonUtil;
+import cn.sunline.lvy.util.SensitiveData;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -99,7 +100,7 @@ public class ApiRequestService {
         dto.setBodyType(entity.getBodyType());
         dto.setBodyContent(entity.getBodyContent());
         dto.setAuthType(entity.getAuthType());
-        dto.setAuthConfig(JsonUtil.parseStringMap(entity.getAuthConfig()));
+        dto.setAuthConfig(SensitiveData.maskAuthConfig(JsonUtil.parseStringMap(entity.getAuthConfig())));
         dto.setCreatedAt(entity.getCreatedAt());
         dto.setUpdatedAt(entity.getUpdatedAt());
         return dto;

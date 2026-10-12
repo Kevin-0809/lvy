@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>报文迁移 - lvy</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/css/console.css">
+</head>
+<body>
+<div id="progress" class="progress"></div>
+
+<div class="cm-app">
+    <aside class="cm-sidebar">
+        <div class="cm-brand">
+            <div class="cm-brand-logo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round">
+                    <ellipse cx="12" cy="6" rx="7" ry="3"/>
+                    <path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/>
+                    <path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/>
+                </svg>
+            </div>
+            <div>
+                <div class="cm-brand-name">lvy</div>
+                <div class="cm-brand-sub">报文迁移平台</div>
+            </div>
+        </div>
+
+        <nav class="cm-nav">
+            <div class="cm-nav-group">
+                <div class="cm-nav-group-title">工作台</div>
+                <a class="cm-nav-item" href="/">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 11l8-7 8 7"/>
+                        <path d="M6 10v10h12V10"/>
+                    </svg>
+                    <span>首页</span>
+                </a>
+            </div>
+            <div class="cm-nav-group">
+                <div class="cm-nav-group-title">功能菜单</div>
+                <a class="cm-nav-item" href="/http-client.html">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 6h16v12H4z"/>
+                        <path d="M8 10l2 2-2 2M13 14h4"/>
+                    </svg>
+                    <span>HTTP 在线客户端</span>
+                </a>
+                <a class="cm-nav-item active" href="/msg-migration.html">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <ellipse cx="12" cy="6" rx="7" ry="3"/>
+                        <path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/>
+                        <path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/>
+                    </svg>
+                    <span>报文迁移</span>
+                </a>
+            </div>
+            <div class="cm-nav-group">
+                <div class="cm-nav-group-title">本页</div>
+                <a class="cm-nav-item" href="#panel-collect">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 3v12"/>
+                        <path d="M7 10l5 5 5-5"/>
+                        <path d="M4 21h16"/>
+                    </svg>
+                    <span>采集报文</span>
+                </a>
+                <a class="cm-nav-item" href="#panel-list">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 6h16M4 12h16M4 18h10"/>
+                    </svg>
+                    <span>已采报文</span>
+                </a>
+                <a class="cm-nav-item" href="#panel-detail">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M6 4h9l3 3v13H6z"/>
+                        <path d="M9 12h6M9 16h6"/>
+                    </svg>
+                    <span>报文明文</span>
+                </a>
+            </div>
+        </nav>
+    </aside>
+
+    <div class="cm-main">
+        <header class="cm-topbar">
+            <div class="cm-env">
+                <span class="cm-env-dot"></span>
+                 默认数据源 · msg_flow_log_request
+            </div>
+            <div class="cm-user">
+                <span class="cm-user-badge">本</span>
+                <span>本地环境</span>
+            </div>
+        </header>
+
+        <main class="cm-content cm-migration-content">
+            <h1 class="cm-page-title">报文采集</h1>
+            <p class="cm-page-desc">输入服务码，从默认数据源按分区从近到远查找报文。在列表中选择记录，下方查看和编辑明文。</p>
+
+            <div class="cm-migration-layout">
+            <section class="cm-card" id="panel-collect">
+                <h2 class="cm-card-title">采集条件</h2>
+                <div class="cm-form-grid">
+                    <div class="cm-field">
+                        <label for="serviceCodeInput">服务码（S码）</label>
+                        <input id="serviceCodeInput" class="cm-input" aria-label="服务码" placeholder="如 S30759418FcySetlRateInq">
+                    </div>
+                    <div class="cm-field">
+                        <label for="limitInput">每类采集数量（bzjson / soap 各 N 条）</label>
+                        <input id="limitInput" class="cm-input" aria-label="每类采集数量" type="number" min="1" max="1000" value="10">
+                    </div>
+                    <div class="cm-actions">
+                        <button id="collectBtn" class="cm-btn primary" type="button">开始采集</button>
+                    </div>
+                </div>
+                <div id="collectResult" class="cm-result hidden"></div>
+                <div class="cm-note">
+                    <span class="cm-note-mark">i</span>
+                    <span>源表 txn_code 实际为「服务码&amp;bzjson / 服务码&amp;soap」，输入纯服务码会自动补全；bzjson 与 soap 各采集指定数量；blob 报文按 UTF-8 / GBK 转为明文入库。</span>
+                </div>
+            </section>
+
+            <section class="cm-card" id="panel-list">
+                <h2 class="cm-card-title">已采集报文</h2>
+                <div class="cm-toolbar">
+                    <input id="filterInput" class="cm-input" aria-label="筛选已采集报文" placeholder="按服务码 / 流水号筛选">
+                    <button id="refreshBtn" class="cm-btn" type="button">刷新</button>
+                </div>
+                <div class="cm-table-wrap">
+                    <table class="cm-table">
+                        <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>服务码</th>
+                            <th>分区</th>
+                            <th>流水号</th>
+                            <th>交易时间</th>
+                            <th>类型</th>
+                            <th>修改</th>
+                        </tr>
+                        </thead>
+                        <tbody id="sampleTableBody"></tbody>
+                    </table>
+                </div>
+                <div class="cm-pager">
+                    <button id="prevBtn" class="cm-btn" type="button">上一页</button>
+                    <span id="pageInfo"></span>
+                    <button id="nextBtn" class="cm-btn" type="button">下一页</button>
+                </div>
+            </section>
+
+            <section class="cm-card" id="panel-detail">
+                <div class="cm-detail-head">
+                    <h2 class="cm-card-title" style="margin:0">报文明文</h2>
+                    <span class="cm-detail-title" id="detailTitle">未选择报文</span>
+                    <span class="o-spacer"></span>
+                    <button id="formatBtn" class="cm-btn" type="button">格式化</button>
+                    <button id="saveBtn" class="cm-btn primary" type="button">保存</button>
+                </div>
+                <details class="cm-meta-disclosure">
+                    <summary>报文元信息</summary>
+                    <div id="detailMeta" class="cm-meta"></div>
+                </details>
+                <textarea id="contentArea" class="cm-code" aria-label="报文明文内容" spellcheck="false"
+                          placeholder="在列表中选择报文后，在此查看/修改明文内容"></textarea>
+            </section>
+            </div>
+        </main>
+    </div>
+</div>
+
+<div id="toastRoot" class="cm-toast-root"></div>
+<script src="/js/msg-migration.js"></script>
+</body>
+</html>

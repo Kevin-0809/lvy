@@ -4,26 +4,15 @@ server:
 spring:
   application:
     name: lvy
-  datasource:
-    url: jdbc:h2:file:./data/lvy
-    driver-class-name: org.h2.Driver
-    username: sa
-    password: ""
   jpa:
     hibernate:
       ddl-auto: update
     open-in-view: false
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.H2Dialect
+        dialect: cn.sunline.lvy.config.GaussDialect
         format_sql: false
     show-sql: false
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
-      settings:
-        web-allow-others: false
   sql:
     init:
       mode: never
@@ -34,3 +23,22 @@ logging:
   level:
     root: info
     cn.sunline.lvy: info
+
+ivy:
+  web:
+    allowed-origins: ${IVY_ALLOWED_ORIGINS:http://localhost:8080,http://127.0.0.1:8080}
+  datasource:
+    tss:
+      url: ${TSS_DATASOURCE_URL:jdbc:postgresql://localhost:15432/postgres}
+      username: ${TSS_DATASOURCE_USERNAME:tss}
+      password: ${TSS_DATASOURCE_PASSWORD:Tss@123456}
+      driver-class-name: ${TSS_DATASOURCE_DRIVER:org.postgresql.Driver}
+    # bxds 源数据源（openGauss，PostgreSQL 协议），仅用于报文采集读取。
+    # 生产环境请通过环境变量覆盖密码等敏感信息。
+    bxds:
+      url: ${BXDS_DATASOURCE_URL:jdbc:postgresql://localhost:15432/postgres}
+      username: ${BXDS_DATASOURCE_USERNAME:adp}
+      password: ${BXDS_DATASOURCE_PASSWORD:OpenGauss@123}
+      driver-class-name: ${BXDS_DATASOURCE_DRIVER:org.postgresql.Driver}
+  msg-migration:
+    charset: ${MSG_MIGRATION_CHARSET:UTF-8}

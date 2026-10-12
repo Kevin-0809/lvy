@@ -8,9 +8,12 @@ import cn.sunline.lvy.util.JsonUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.net.InetAddress;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -36,24 +39,39 @@ public class ProxyService {
     private static final Logger log = LoggerFactory.getLogger(ProxyService.class);
 
     private static final Duration TIMEOUT = Duration.ofSeconds(30);
+    private static final long DEFAULT_MAX_RESPONSE_BYTES = 10L * 1024 * 1024;
     private static final List<String> RESTRICTED_HEADERS = List.of(
             "connection", "content-length", "expect", "host", "upgrade", "transfer-encoding");
 
     private final HttpClient httpClient;
     private final VariableService variableService;
     private final HistoryService historyService;
+    private final boolean allowPrivateHosts;
+    private final long maxResponseBytes;
 
+    @Autowired
     public ProxyService(VariableService variableService, HistoryService historyService) {
+        this(variableService, historyService, false, DEFAULT_MAX_RESPONSE_BYTES);
+    }
+
+    ProxyService(VariableService variableService, HistoryService historyService, boolean allowPrivateHosts) {
+        this(variableService, historyService, allowPrivateHosts, DEFAULT_MAX_RESPONSE_BYTES);
+    }
+
+    ProxyService(VariableService variableService, HistoryService historyService,
+                 boolean allowPrivateHosts, long maxResponseBytes) {
         this.variableService = variableService;
         this.historyService = historyService;
+        this.allowPrivateHosts = allowPrivateHosts;
+        this.maxResponseBytes = maxResponseBytes;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(TIMEOUT)
-                .followRedirects(HttpClient.Redirect.NORMAL)
+                .followRedirects(HttpClient.Redirect.NEVER)
                 .build();
     }
 
     public ProxyResponse send(ProxyRequest request) {
-        Map<String, String> variables = variableService.resolveVariables(request.getEnvironmentId());
+        Map<String, String> variables = variableService.resolveVariables();
 
         String method = request.getMethod() == null ? "GET" : request.getMethod().trim().toUpperCase(Locale.ROOT);
         String url = variableService.replace(request.getUrl(), variables);
@@ -63,6 +81,7 @@ public class ProxyService {
         Map<String, String> authConfig = replaceMap(request.getAuthConfig(), variables);
 
         URI uri = buildUri(url, params);
+        validateTarget(uri);
         BodySpec bodySpec = buildBody(request.getBodyType(), bodyContent);
 
         HttpRequest.Builder builder = HttpRequest.newBuilder(uri)
@@ -96,10 +115,11 @@ public class ProxyService {
         long start = System.nanoTime();
         ProxyResponse response = new ProxyResponse();
         try {
-            HttpResponse<byte[]> httpResponse = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
+            HttpResponse<InputStream> httpResponse = httpClient.send(builder.build(),
+                    HttpResponse.BodyHandlers.ofInputStream());
             long durationMs = (System.nanoTime() - start) / 1_000_000;
 
-            byte[] bytes = httpResponse.body();
+            byte[] bytes = readResponse(httpResponse.body());
             String contentType = httpResponse.headers().firstValue("Content-Type").orElse(null);
 
             response.setStatusCode(httpResponse.statusCode());
@@ -113,6 +133,8 @@ public class ProxyService {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new BizException(500, "请求被中断");
+        } catch (BizException e) {
+            throw e;
         } catch (IllegalArgumentException e) {
             throw new BizException(400, "请求地址或参数不合法：" + e.getMessage());
         } catch (Exception e) {
@@ -167,6 +189,45 @@ public class ProxyService {
         }
     }
 
+    private void validateTarget(URI uri) {
+        if (allowPrivateHosts) {
+            return;
+        }
+        String scheme = uri.getScheme();
+        if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
+            throw new BizException(400, "仅支持 HTTP/HTTPS 地址");
+        }
+        try {
+            for (InetAddress address : InetAddress.getAllByName(uri.getHost())) {
+                if (address.isAnyLocalAddress() || address.isLoopbackAddress()
+                        || address.isLinkLocalAddress() || address.isSiteLocalAddress()
+                        || address.isMulticastAddress()) {
+                    throw new BizException(400, "禁止访问内网地址");
+                }
+            }
+        } catch (BizException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BizException(400, "无法解析目标地址");
+        }
+    }
+
+    private byte[] readResponse(InputStream input) throws Exception {
+        try (InputStream in = input; ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            long total = 0;
+            int read;
+            while ((read = in.read(buffer)) >= 0) {
+                total += read;
+                if (total > maxResponseBytes) {
+                    throw new BizException(413, "响应体超过限制（最大 " + maxResponseBytes + " 字节）");
+                }
+                out.write(buffer, 0, read);
+            }
+            return out.toByteArray();
+        }
+    }
+
     private BodySpec buildBody(String bodyType, String bodyContent) {
         String type = bodyType == null ? "none" : bodyType.toLowerCase(Locale.ROOT);
         byte[] content = bodyContent == null ? new byte[0] : bodyContent.getBytes(StandardCharsets.UTF_8);
@@ -174,6 +235,9 @@ public class ProxyService {
             case "raw":
                 return new BodySpec(HttpRequest.BodyPublishers.ofString(bodyContent == null ? "" : bodyContent,
                         StandardCharsets.UTF_8), "application/json; charset=utf-8");
+            case "xml":
+                return new BodySpec(HttpRequest.BodyPublishers.ofString(bodyContent == null ? "" : bodyContent,
+                        StandardCharsets.UTF_8), "application/xml; charset=utf-8");
             case "x-www-form-urlencoded":
                 return new BodySpec(HttpRequest.BodyPublishers.ofString(buildUrlEncoded(bodyContent),
                         StandardCharsets.UTF_8), "application/x-www-form-urlencoded; charset=utf-8");

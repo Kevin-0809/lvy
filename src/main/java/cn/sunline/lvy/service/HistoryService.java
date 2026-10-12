@@ -8,6 +8,7 @@ import cn.sunline.lvy.entity.RequestHistory;
 import cn.sunline.lvy.exception.BizException;
 import cn.sunline.lvy.repository.RequestHistoryRepository;
 import cn.sunline.lvy.util.JsonUtil;
+import cn.sunline.lvy.util.SensitiveData;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -82,7 +83,7 @@ public class HistoryService {
         dto.setBodyType(entity.getBodyType());
         dto.setBodyContent(entity.getBodyContent());
         dto.setAuthType(entity.getAuthType());
-        dto.setAuthConfig(JsonUtil.parseStringMap(entity.getAuthConfig()));
+        dto.setAuthConfig(SensitiveData.maskAuthConfig(JsonUtil.parseStringMap(entity.getAuthConfig())));
         dto.setStatusCode(entity.getStatusCode());
         dto.setDurationMs(entity.getDurationMs());
         dto.setResponseSize(entity.getResponseSize());

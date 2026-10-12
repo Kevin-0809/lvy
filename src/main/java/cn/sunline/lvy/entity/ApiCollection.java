@@ -13,10 +13,10 @@ import java.time.LocalDateTime;
 
 /**
  * 集合：一个集合下可保存多个请求。
- * 表名使用 collection（H2 中非保留字），类名加 Api 前缀避免与 java.util.Collection 冲突。
+ * 表名统一使用 ivy 前缀，类名加 Api 前缀避免与 java.util.Collection 冲突。
  */
 @Entity
-@Table(name = "collection")
+@Table(name = "ivy_collection")
 public class ApiCollection {
 
     @Id

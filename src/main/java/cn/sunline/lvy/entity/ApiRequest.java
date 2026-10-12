@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
  * headers / params / authConfig 均以 JSON 字符串存 TEXT。
  */
 @Entity
-@Table(name = "api_request")
+@Table(name = "ivy_api_request")
 public class ApiRequest {
 
     @Id

@@ -30,9 +30,6 @@ public class ProxyRequest {
 
     private Map<String, String> authConfig = new LinkedHashMap<>();
 
-    /** 可选：指定使用哪个环境的变量做替换；不传则合并所有环境变量。 */
-    private Long environmentId;
-
     public String getMethod() {
         return method;
     }
@@ -95,13 +92,5 @@ public class ProxyRequest {
 
     public void setAuthConfig(Map<String, String> authConfig) {
         this.authConfig = authConfig;
-    }
-
-    public Long getEnvironmentId() {
-        return environmentId;
-    }
-
-    public void setEnvironmentId(Long environmentId) {
-        this.environmentId = environmentId;
     }
 }

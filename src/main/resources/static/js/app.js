@@ -24,10 +24,7 @@
         activeCollectionId: null,
         collectionRequests: {},
         history: [],
-        environments: [],
-        environmentId: "",
         editingRequestId: null,
-        editingEnvId: null,
         response: null,
         request: defaultRequest()
     };
@@ -399,45 +396,6 @@
         });
     }
 
-    function renderEnvironments() {
-        var container = $("#envList");
-        container.innerHTML = "";
-        if (!state.environments.length) {
-            container.appendChild(el("div", "side-empty", "暂无环境"));
-        }
-        state.environments.forEach(function (env) {
-            var item = el("div", "side-item");
-            var main = el("div", "item-main");
-            main.textContent = env.name;
-            var count = Object.keys(env.variables || {}).length;
-            var meta = el("span", "item-meta", count + " 项");
-            item.appendChild(main);
-            item.appendChild(meta);
-            item.addEventListener("click", function () {
-                openEnvModal(env);
-            });
-            container.appendChild(item);
-        });
-        renderEnvSelect();
-    }
-
-    function renderEnvSelect() {
-        var select = $("#envSelect");
-        var current = state.environmentId;
-        select.innerHTML = "";
-        var all = document.createElement("option");
-        all.value = "";
-        all.textContent = "全部变量";
-        select.appendChild(all);
-        state.environments.forEach(function (env) {
-            var opt = document.createElement("option");
-            opt.value = String(env.id);
-            opt.textContent = env.name;
-            select.appendChild(opt);
-        });
-        select.value = current || "";
-    }
-
     /* ---------- 编辑器状态同步 ---------- */
 
     function syncEditorFromState() {
@@ -488,8 +446,11 @@
     function toggleBodyAreas() {
         var type = state.request.bodyType;
         $("#bodyNone").classList.toggle("hidden", type !== "none");
-        $("#bodyRaw").classList.toggle("hidden", type !== "raw");
+        $("#bodyRaw").classList.toggle("hidden", type !== "raw" && type !== "xml");
         $("#bodyForm").classList.toggle("hidden", type !== "x-www-form-urlencoded" && type !== "form-data");
+        $("#rawBodyInput").placeholder = type === "xml"
+            ? '<root>\n  <item>lvy</item>\n</root>'
+            : '{\n  "name": "lvy"\n}';
     }
 
     function toggleAuthAreas() {
@@ -504,7 +465,7 @@
     function buildProxyPayload() {
         var req = state.request;
         var bodyContent = null;
-        if (req.bodyType === "raw") {
+        if (req.bodyType === "raw" || req.bodyType === "xml") {
             bodyContent = req.rawBody;
         } else if (req.bodyType === "x-www-form-urlencoded" || req.bodyType === "form-data") {
             bodyContent = JSON.stringify(req.formBody.filter(function (p) { return p.key; }));
@@ -524,8 +485,7 @@
             bodyType: req.bodyType,
             bodyContent: bodyContent,
             authType: req.authType,
-            authConfig: authConfig,
-            environmentId: state.environmentId ? Number(state.environmentId) : null
+            authConfig: authConfig
         };
     }
 
@@ -589,6 +549,9 @@
             var tree = el("div", "json-view");
             renderJsonNode(parsed, null, tree, true);
             pretty.appendChild(tree);
+        } else if (detectXml(res.contentType, res.body)) {
+            var formattedXml = transformXml(res.body, true);
+            pretty.appendChild(buildPre(formattedXml !== null ? formattedXml : res.body));
         } else {
             pretty.appendChild(buildPre(res.body));
         }
@@ -654,10 +617,130 @@
         }
     }
 
+    /* ---------- XML 处理 ---------- */
+
+    function looksLikeXml(text) {
+        return !!text && String(text).trim().charAt(0) === "<";
+    }
+
+    function isXmlContentType(contentType) {
+        return !!contentType && String(contentType).toLowerCase().indexOf("xml") >= 0;
+    }
+
+    function parseXmlDocument(text) {
+        if (!looksLikeXml(text)) return null;
+        try {
+            var doc = new DOMParser().parseFromString(String(text).trim(), "application/xml");
+            if (!doc || doc.getElementsByTagName("parsererror").length > 0) return null;
+            return doc;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function detectXml(contentType, text) {
+        if (isXmlContentType(contentType)) return true;
+        return parseXmlDocument(text) !== null;
+    }
+
+    function transformXml(text, pretty) {
+        var doc = parseXmlDocument(text);
+        if (!doc) return null;
+        removeWhitespaceNodes(doc);
+        var source = new XMLSerializer().serializeToString(doc);
+        return pretty ? indentXml(source) : source.trim();
+    }
+
+    function removeWhitespaceNodes(node) {
+        Array.prototype.slice.call(node.childNodes).forEach(function (child) {
+            if (child.nodeType === 3) {
+                if (!child.nodeValue || !child.nodeValue.trim()) {
+                    node.removeChild(child);
+                }
+            } else if (child.nodeType === 1) {
+                removeWhitespaceNodes(child);
+            }
+        });
+    }
+
+    function indentXml(source) {
+        var s = String(source).replace(/\r\n/g, "\n").trim();
+        var tokens = [];
+        var i = 0;
+        var n = s.length;
+        while (i < n) {
+            if (s.charAt(i) !== "<") {
+                var next = s.indexOf("<", i);
+                if (next < 0) next = n;
+                var segment = s.slice(i, next);
+                if (segment.trim()) tokens.push({ type: "text", value: segment.trim() });
+                i = next;
+                continue;
+            }
+            if (s.indexOf("<!--", i) === i) {
+                var endComment = s.indexOf("-->", i + 4);
+                if (endComment < 0) endComment = n - 3;
+                tokens.push({ type: "line", value: s.slice(i, endComment + 3) });
+                i = endComment + 3;
+                continue;
+            }
+            if (s.indexOf("<![CDATA[", i) === i) {
+                var endCdata = s.indexOf("]]>", i + 9);
+                if (endCdata < 0) endCdata = n - 3;
+                tokens.push({ type: "line", value: s.slice(i, endCdata + 3) });
+                i = endCdata + 3;
+                continue;
+            }
+            var j = i + 1;
+            var quote = null;
+            while (j < n) {
+                var ch = s.charAt(j);
+                if (quote) {
+                    if (ch === quote) quote = null;
+                } else if (ch === "\"" || ch === "'") {
+                    quote = ch;
+                } else if (ch === ">") {
+                    break;
+                }
+                j++;
+            }
+            var tag = s.slice(i, Math.min(j + 1, n));
+            var type;
+            if (tag.indexOf("</") === 0) type = "close";
+            else if (tag.indexOf("<?") === 0 || tag.indexOf("<!") === 0) type = "line";
+            else if (/\/>$/.test(tag)) type = "line";
+            else type = "open";
+            tokens.push({ type: type, value: tag });
+            i = j + 1;
+        }
+
+        var lines = [];
+        var depth = 0;
+        tokens.forEach(function (token) {
+            if (token.type === "close") {
+                depth = Math.max(depth - 1, 0);
+                lines.push(xmlIndent(depth) + token.value);
+            } else if (token.type === "open") {
+                lines.push(xmlIndent(depth) + token.value);
+                depth++;
+            } else {
+                lines.push(xmlIndent(depth) + token.value);
+            }
+        });
+        return lines.join("\n");
+    }
+
+    function xmlIndent(depth) {
+        return new Array(depth + 1).join("  ");
+    }
+
     function transformRequestBody(pretty) {
-        var result = reformatJson($("#rawBodyInput").value, pretty);
+        var isXml = state.request.bodyType === "xml";
+        var result = isXml
+            ? transformXml($("#rawBodyInput").value, pretty)
+            : reformatJson($("#rawBodyInput").value, pretty);
         if (result === null) {
-            toast("当前内容不是合法 JSON", true);
+            toast(isXml ? "当前内容不是合法 XML" : "当前内容不是合法 JSON", true);
             return;
         }
         $("#rawBodyInput").value = result;
@@ -670,9 +753,12 @@
             toast("暂无响应内容", true);
             return;
         }
-        var result = reformatJson(state.response.body, pretty);
+        var isXml = detectXml(state.response.contentType, state.response.body);
+        var result = isXml
+            ? transformXml(state.response.body, pretty)
+            : reformatJson(state.response.body, pretty);
         if (result === null) {
-            toast("响应内容不是合法 JSON", true);
+            toast(isXml ? "响应内容不是合法 XML" : "响应内容不是合法 JSON", true);
             return;
         }
         state.response.body = result;
@@ -840,10 +926,6 @@
             state.request.authConfig.password = $("#basicPassword").value;
         });
 
-        $("#envSelect").addEventListener("change", function () {
-            state.environmentId = $("#envSelect").value;
-        });
-
         $("#resetBtn").addEventListener("click", function () {
             state.request = defaultRequest();
             state.editingRequestId = null;
@@ -859,11 +941,9 @@
         $("#saveBtn").addEventListener("click", openSaveModal);
         $("#newCollectionBtn").addEventListener("click", createCollection);
         $("#clearHistoryBtn").addEventListener("click", clearHistory);
-        $("#newEnvBtn").addEventListener("click", function () { openEnvModal(null); });
 
         bindPrompt();
         bindSave();
-        bindEnv();
         bindDivider();
     }
 
@@ -967,13 +1047,15 @@
         state.request.bodyType = req.bodyType || "none";
         state.request.authType = req.authType || "none";
         state.request.authConfig = req.authConfig || {};
+        if (state.request.authConfig.token === "••••••••") state.request.authConfig.token = "";
+        if (state.request.authConfig.password === "••••••••") state.request.authConfig.password = "";
         applyBodyContent(req.bodyType, req.bodyContent);
         syncEditorFromState();
         renderCollections();
     }
 
     function applyBodyContent(bodyType, content) {
-        if (bodyType === "raw") {
+        if (bodyType === "raw" || bodyType === "xml") {
             state.request.rawBody = content || "";
             state.request.formBody = [];
         } else if (bodyType === "x-www-form-urlencoded" || bodyType === "form-data") {
@@ -1163,70 +1245,6 @@
         toast("已回填到编辑器");
     }
 
-    /* ---------- 环境 ---------- */
-
-    function openEnvModal(env) {
-        state.editingEnvId = env ? env.id : null;
-        state.editingEnvVars = env ? Object.keys(env.variables || {}).map(function (k) {
-            return { key: k, value: env.variables[k], enabled: true };
-        }) : [];
-        $("#envModalTitle").textContent = env ? "编辑环境" : "新建环境";
-        $("#envName").value = env ? env.name : "";
-        $("#envDeleteBtn").classList.toggle("hidden", !env);
-        renderKv($("#envVarTable"), state.editingEnvVars, {
-            showDescription: false, keyPlaceholder: "变量名", valuePlaceholder: "值"
-        });
-        $("#envOverlay").classList.remove("hidden");
-        $("#envName").focus();
-    }
-
-    function closeEnvModal() {
-        $("#envOverlay").classList.add("hidden");
-    }
-
-    function collectEnvVariables() {
-        var vars = {};
-        state.editingEnvVars.forEach(function (pair) {
-            if (pair.key) vars[pair.key] = pair.value || "";
-        });
-        return vars;
-    }
-
-    function bindEnv() {
-        $("#envCancel").addEventListener("click", closeEnvModal);
-        $("#envSave").addEventListener("click", function () {
-            var name = $("#envName").value.trim();
-            if (!name) {
-                toast("请输入环境名称", true);
-                return;
-            }
-            var body = { name: name, variables: collectEnvVariables() };
-            var method = state.editingEnvId ? "PUT" : "POST";
-            var path = state.editingEnvId ? "/api/environments/" + state.editingEnvId : "/api/environments";
-            api(path, { method: method, body: body }).then(function () {
-                closeEnvModal();
-                toast("环境已保存");
-                loadEnvironments();
-            }).catch(function (err) { toast(err.message, true); });
-        });
-        $("#envDeleteBtn").addEventListener("click", function () {
-            if (!state.editingEnvId) return;
-            if (!window.confirm("删除该环境？")) return;
-            api("/api/environments/" + state.editingEnvId, { method: "DELETE" }).then(function () {
-                closeEnvModal();
-                toast("环境已删除");
-                loadEnvironments();
-            }).catch(function (err) { toast(err.message, true); });
-        });
-    }
-
-    function loadEnvironments() {
-        return api("/api/environments").then(function (data) {
-            state.environments = data || [];
-            renderEnvironments();
-        });
-    }
-
     /* ---------- 初始化 ---------- */
 
     function init() {
@@ -1234,7 +1252,6 @@
         syncEditorFromState();
         loadCollections().catch(function (err) { toast(err.message, true); });
         loadHistory().catch(function () { });
-        loadEnvironments().catch(function () { });
     }
 
     document.addEventListener("DOMContentLoaded", init);
